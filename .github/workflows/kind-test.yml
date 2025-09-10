@@ -1,0 +1,122 @@
+name: Kind Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.24.0'
+  OPERATOR_NAME: hcp-idms-operator
+  NAMESPACE: openshift-hcp-idms-operator
+
+jobs:
+  kind-test:
+    name: Kind Cluster Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Install Kind
+      uses: helm/kind-action@v1.10.0
+
+    - name: Install Podman
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y podman
+
+    - name: Create Kind cluster
+      run: |
+        cat <<EOF | kind create cluster --config=-
+        kind: Cluster
+        apiVersion: kind.x-k8s.io/v1alpha4
+        nodes:
+        - role: control-plane
+          kubeadmConfigPatches:
+          - |
+            kind: InitConfiguration
+            nodeRegistration:
+              kubeletExtraArgs:
+                node-labels: "ingress-ready=true"
+          extraPortMappings:
+          - containerPort: 80
+            hostPort: 80
+            protocol: TCP
+          - containerPort: 443
+            hostPort: 443
+            protocol: TCP
+        EOF
+
+    - name: Build operator binary
+      run: make manager
+
+    - name: Build container image
+      run: |
+        podman build -t ${{ env.OPERATOR_NAME }}:test .
+
+    - name: Load image into Kind
+      run: |
+        kind load docker-image ${{ env.OPERATOR_NAME }}:test
+
+    - name: Install CRDs
+      run: |
+        oc apply -f config/crd/bases/
+
+    - name: Create namespace
+      run: |
+        oc create namespace ${{ env.NAMESPACE }} || true
+
+    - name: Deploy operator
+      run: |
+        # Deploy RBAC
+        oc apply -f config/rbac/service_account.yaml
+        oc apply -f config/rbac/role.yaml
+        oc apply -f config/rbac/role_binding.yaml
+
+        # Deploy DaemonSet
+        oc apply -f config/manager/daemonset.yaml
+
+    - name: Wait for operator to be ready
+      run: |
+        oc wait --for=condition=ready pod -l app=${{ env.OPERATOR_NAME }} -n ${{ env.NAMESPACE }} --timeout=300s
+
+    - name: Test operator functionality
+      run: |
+        # Check that the operator is running
+        oc get pods -n ${{ env.NAMESPACE }} -l app=${{ env.OPERATOR_NAME }}
+
+        # Check operator logs
+        oc logs -n ${{ env.NAMESPACE }} -l app=${{ env.OPERATOR_NAME }} --tail=50
+
+    - name: Test sample resources
+      run: |
+        # Apply sample resources
+        oc apply -f config/samples/
+
+        # Wait a bit for processing
+        sleep 10
+
+        # Check that resources are created
+        oc get imagemirrordigestsets
+
+    - name: Test operator cleanup
+      run: |
+        # Delete sample resources
+        oc delete -f config/samples/ --ignore-not-found=true
+
+        # Delete operator
+        oc delete -f config/manager/daemonset.yaml --ignore-not-found=true
+        oc delete -f config/rbac/ --ignore-not-found=true
+
+    - name: Clean up Kind cluster
+      if: always()
+      run: |
+        kind delete cluster

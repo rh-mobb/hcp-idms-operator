@@ -1,0 +1,251 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  GO_VERSION: '1.24.0'
+  OPERATOR_NAME: hcp-idms-operator
+  IMAGE_REGISTRY: quay.io/openshift
+  IMAGE_TAG: latest
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Install dependencies
+      run: |
+        go mod download
+        go mod verify
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run go fmt check
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "The following files are not formatted:"
+          gofmt -s -l .
+          exit 1
+        fi
+
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.out ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        args: --timeout=5m
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Install controller-gen
+      run: |
+        go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+
+    - name: Generate manifests
+      run: make manifests
+
+    - name: Build binary
+      run: make manager
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: operator-binary
+        path: bin/manager
+        retention-days: 7
+
+  container-build:
+    name: Container Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Podman
+      uses: containers/setup-podman@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Build binary
+      run: make manager
+
+    - name: Build container image
+      run: |
+        podman build -t ${{ env.IMAGE_REGISTRY }}/${{ env.OPERATOR_NAME }}:${{ env.IMAGE_TAG }} .
+        podman build -t ${{ env.IMAGE_REGISTRY }}/${{ env.OPERATOR_NAME }}:${{ github.sha }} .
+
+    - name: Test container image
+      run: |
+        podman run --rm ${{ env.IMAGE_REGISTRY }}/${{ env.OPERATOR_NAME }}:${{ env.IMAGE_TAG }} --help
+
+    - name: Save container image
+      run: |
+        podman save ${{ env.IMAGE_REGISTRY }}/${{ env.OPERATOR_NAME }}:${{ env.IMAGE_TAG }} -o operator-image.tar
+
+    - name: Upload container image
+      uses: actions/upload-artifact@v4
+      with:
+        name: operator-image
+        path: operator-image.tar
+        retention-days: 7
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  integration-test:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Download operator binary
+      uses: actions/download-artifact@v4
+      with:
+        name: operator-binary
+        path: bin/
+
+    - name: Make binary executable
+      run: chmod +x bin/manager
+
+    - name: Run integration tests
+      run: |
+        # Test that the binary can start without errors
+        timeout 10s bin/manager --help || true
+
+        # Test that the binary can be executed
+        bin/manager --version || true
+
+    - name: Test sample resources
+      run: |
+        # Validate sample YAML files
+        for file in config/samples/*.yaml; do
+          echo "Validating $file"
+          # Basic YAML syntax check
+          python3 -c "import yaml; yaml.safe_load(open('$file'))"
+        done
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [test, lint, build, container-build, security, integration-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == github.event.repository.full_name
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: operator-binary
+        path: bin/
+
+    - name: Create release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: bin/manager
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

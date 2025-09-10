@@ -1,0 +1,27 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: hcp-idms-operator
+  namespace: system
+  labels:
+    app: hcp-idms-operator
+spec:
+  source:
+    type: Binary
+    binary: {}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+      from:
+        kind: DockerImage
+        name: registry.redhat.io/ubi8/ubi-minimal:latest
+  output:
+    to:
+      kind: ImageStreamTag
+      name: hcp-idms-operator:latest
+  triggers:
+  - type: ConfigChange
+  - type: ImageChange
+    imageChange: {}
+  runPolicy: Serial

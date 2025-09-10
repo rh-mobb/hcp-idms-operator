@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: crio-reload-monitor
+  namespace: system
+  labels:
+    app: crio-reload-monitor
+spec:
+  selector:
+    matchLabels:
+      app: crio-reload-monitor
+  template:
+    metadata:
+      labels:
+        app: crio-reload-monitor
+    spec:
+      serviceAccountName: crio-reload-monitor
+      containers:
+      - name: monitor
+        image: quay.io/openshift/hcp-idms-operator:latest
+        imagePullPolicy: Always
+        command:
+        - /bin/bash
+        - -c
+        - |
+          #!/bin/bash
+          SIGNAL_FILE="/etc/containers/registry.conf.d/.crio-reload-needed"
+          
+          log_message() {
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+          }
+
+          reload_crio() {
+              log_message "CRI-O reload signal detected, attempting to reload CRI-O..."
+
+              # Try systemctl reload first (preferred method)
+              if systemctl reload crio 2>/dev/null; then
+                  log_message "Successfully reloaded CRI-O using systemctl reload"
+                  return 0
+              fi
+
+              # If reload fails, try sending SIGHUP
+              if pkill -HUP crio 2>/dev/null; then
+                  log_message "Successfully sent SIGHUP to CRI-O"
+                  return 0
+              fi
+
+              # If SIGHUP fails, try restart as last resort
+              if systemctl restart crio 2>/dev/null; then
+                  log_message "Successfully restarted CRI-O using systemctl restart"
+                  return 0
+              fi
+
+              log_message "ERROR: Failed to reload CRI-O using all methods"
+              return 1
+          }
+
+          log_message "Starting CRI-O reload monitor..."
+
+          while true; do
+              if [ -f "$SIGNAL_FILE" ]; then
+                  log_message "Signal file detected: $SIGNAL_FILE"
+
+                  # Read timestamp from signal file
+                  if [ -r "$SIGNAL_FILE" ]; then
+                      timestamp=$(grep "Generated at:" "$SIGNAL_FILE" | cut -d' ' -f3-4)
+                      log_message "Signal generated at: $timestamp"
+                  fi
+
+                  # Attempt to reload CRI-O
+                  if reload_crio; then
+                      # Remove the signal file after successful reload
+                      rm -f "$SIGNAL_FILE"
+                      log_message "Signal file removed after successful reload"
+                  else
+                      log_message "Keeping signal file due to reload failure"
+                  fi
+              fi
+
+              # Sleep for 5 seconds before checking again
+              sleep 5
+          done
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - DAC_OVERRIDE
+          runAsNonRoot: false
+          runAsUser: 0
+        volumeMounts:
+        - name: registry-config
+          mountPath: /etc/containers/registry.conf.d
+        - name: systemd
+          mountPath: /run/systemd
+          readOnly: true
+        - name: proc
+          mountPath: /proc
+          readOnly: true
+        resources:
+          limits:
+            cpu: 50m
+            memory: 64Mi
+          requests:
+            cpu: 10m
+            memory: 32Mi
+      volumes:
+      - name: registry-config
+        hostPath:
+          path: /etc/containers/registry.conf.d
+          type: DirectoryOrCreate
+      - name: var-log
+        hostPath:
+          path: /var/log
+          type: DirectoryOrCreate
+      - name: systemd
+        hostPath:
+          path: /run/systemd
+          type: DirectoryOrCreate
+      - name: proc
+        hostPath:
+          path: /proc
+          type: DirectoryOrCreate
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      - operator: Exists
+        effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        tolerationSeconds: 300
+      - operator: Exists
+        effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        tolerationSeconds: 300

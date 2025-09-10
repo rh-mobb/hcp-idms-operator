@@ -1,0 +1,178 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hcp-idms-operator
+  namespace: system
+  labels:
+    app: hcp-idms-operator
+spec:
+  selector:
+    matchLabels:
+      app: hcp-idms-operator
+  template:
+    metadata:
+      labels:
+        app: hcp-idms-operator
+    spec:
+      serviceAccountName: hcp-idms-operator
+      initContainers:
+      - name: crio-reload-monitor
+        image: quay.io/openshift/hcp-idms-operator:latest
+        imagePullPolicy: Always
+        command:
+        - /bin/bash
+        - -c
+        - |
+          cat > /usr/local/bin/crio-reload-monitor.sh << 'EOF'
+          #!/bin/bash
+          SIGNAL_FILE="/etc/containers/registry.conf.d/.crio-reload-needed"
+          LOG_FILE="/var/log/crio-reload-monitor.log"
+
+          log_message() {
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+          }
+
+          reload_crio() {
+              log_message "CRI-O reload signal detected, attempting to reload CRI-O..."
+
+              if systemctl reload crio 2>/dev/null; then
+                  log_message "Successfully reloaded CRI-O using systemctl reload"
+                  return 0
+              fi
+
+              if pkill -HUP crio 2>/dev/null; then
+                  log_message "Successfully sent SIGHUP to CRI-O"
+                  return 0
+              fi
+
+              if systemctl restart crio 2>/dev/null; then
+                  log_message "Successfully restarted CRI-O using systemctl restart"
+                  return 0
+              fi
+
+              log_message "ERROR: Failed to reload CRI-O using all methods"
+              return 1
+          }
+
+          log_message "Starting CRI-O reload monitor..."
+
+          while true; do
+              if [ -f "$SIGNAL_FILE" ]; then
+                  log_message "Signal file detected: $SIGNAL_FILE"
+
+                  if [ -r "$SIGNAL_FILE" ]; then
+                      timestamp=$(grep "Generated at:" "$SIGNAL_FILE" | cut -d' ' -f3-4)
+                      log_message "Signal generated at: $timestamp"
+                  fi
+
+                  if reload_crio; then
+                      rm -f "$SIGNAL_FILE"
+                      log_message "Signal file removed after successful reload"
+                  else
+                      log_message "Keeping signal file due to reload failure"
+                  fi
+              fi
+
+              sleep 5
+          done
+          EOF
+          chmod +x /usr/local/bin/crio-reload-monitor.sh
+          /usr/local/bin/crio-reload-monitor.sh
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - DAC_OVERRIDE
+          runAsNonRoot: false
+          runAsUser: 0
+        volumeMounts:
+        - name: registry-config
+          mountPath: /etc/containers/registry.conf.d
+        - name: var-log
+          mountPath: /var/log
+        - name: systemd
+          mountPath: /run/systemd
+          readOnly: true
+      containers:
+      - name: manager
+        image: quay.io/openshift/hcp-idms-operator:latest
+        imagePullPolicy: Always
+        command:
+        - /manager
+        args:
+        - --leader-elect=false
+        - --metrics-bind-address=0.0.0.0:8080
+        - --health-probe-bind-address=0.0.0.0:8081
+        env:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: "hcp-idms-operator"
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - name: registry-config
+          mountPath: /etc/containers/registry.conf.d
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: registry-config
+        hostPath:
+          path: /etc/containers/registry.conf.d
+          type: DirectoryOrCreate
+      - name: tmp
+        emptyDir: {}
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      - operator: Exists
+        effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        tolerationSeconds: 300
+      - operator: Exists
+        effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        tolerationSeconds: 300

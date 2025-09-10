@@ -1,0 +1,43 @@
+# Build the manager binary
+FROM registry.access.redhat.com/ubi8/go-toolset:1.25 as builder
+
+WORKDIR /workspace
+# Copy the Go Modules manifests
+COPY go.mod go.mod
+COPY go.sum go.sum
+# cache deps before building and copying source so that we don't need to re-download as much
+# and so that source changes don't invalidate our downloaded layer
+RUN go mod download
+
+# Copy the go source
+COPY cmd/ cmd/
+COPY api/ api/
+COPY internal/ internal/
+
+# Build
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o manager cmd/manager/main.go
+
+# Use UBI minimal as base image to package the manager binary
+FROM registry.redhat.io/ubi8/ubi-minimal:latest
+
+# Install necessary packages
+RUN microdnf install -y ca-certificates && microdnf clean all
+
+# Create non-root user
+RUN useradd -u 65532 -g 65532 -s /bin/false -m manager
+
+WORKDIR /
+
+# Copy the binary from builder stage
+COPY --from=builder /workspace/manager /manager
+
+# Change ownership
+RUN chown 65532:65532 /manager
+
+# Switch to non-root user
+USER 65532:65532
+
+# Expose ports
+EXPOSE 8080 8081
+
+ENTRYPOINT ["/manager"]
