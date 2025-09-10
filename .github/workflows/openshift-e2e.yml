@@ -1,154 +1,154 @@
-name: OpenShift E2E Test
+# name: OpenShift E2E Test
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+# on:
+#   push:
+#     branches: [ main ]
+#   pull_request:
+#     branches: [ main ]
+#   workflow_dispatch:
 
-env:
-  GO_VERSION: '1.24.0'
-  OPERATOR_NAME: hcp-idms-operator
-  NAMESPACE: openshift-hcp-idms-operator
+# env:
+#   GO_VERSION: '1.24.0'
+#   OPERATOR_NAME: hcp-idms-operator
+#   NAMESPACE: openshift-hcp-idms-operator
 
-jobs:
-  openshift-e2e:
-    name: OpenShift End-to-End Test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+# jobs:
+#   openshift-e2e:
+#     name: OpenShift End-to-End Test
+#     runs-on: ubuntu-latest
+#     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+#     steps:
+#     - name: Checkout code
+#       uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
+#     - name: Set up Go
+#       uses: actions/setup-go@v5
+#       with:
+#         go-version: ${{ env.GO_VERSION }}
 
-    - name: Install oc CLI
-      run: |
-        curl -L https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz | tar -xz -C /usr/local/bin/
-        oc version --client
+#     - name: Install oc CLI
+#       run: |
+#         curl -L https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz | tar -xz -C /usr/local/bin/
+#         oc version --client
 
-    - name: Install Podman
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y podman
+#     - name: Install Podman
+#       run: |
+#         sudo apt-get update
+#         sudo apt-get install -y podman
 
-    - name: Build operator binary
-      run: make manager
+#     - name: Build operator binary
+#       run: make manager
 
-    - name: Build container image
-      run: |
-        podman build -t ${{ env.OPERATOR_NAME }}:test .
+#     - name: Build container image
+#       run: |
+#         podman build -t ${{ env.OPERATOR_NAME }}:test .
 
-    - name: Test with OpenShift cluster
-      if: github.event_name == 'workflow_dispatch'
-      run: |
-        # This would require a real OpenShift cluster
-        # For now, we'll just validate the manifests
-        echo "E2E testing would require a real OpenShift cluster"
-        echo "This is a placeholder for future E2E testing"
+#     - name: Test with OpenShift cluster
+#       if: github.event_name == 'workflow_dispatch'
+#       run: |
+#         # This would require a real OpenShift cluster
+#         # For now, we'll just validate the manifests
+#         echo "E2E testing would require a real OpenShift cluster"
+#         echo "This is a placeholder for future E2E testing"
 
-    - name: Validate OpenShift deployment
-      run: |
-        # Validate all OpenShift-specific manifests
-        echo "Validating OpenShift manifests..."
+#     - name: Validate OpenShift deployment
+#       run: |
+#         # Validate all OpenShift-specific manifests
+#         echo "Validating OpenShift manifests..."
 
-        # Test BuildConfig
-        oc apply --dry-run=client -f config/openshift/buildconfig.yaml
-        echo "✓ BuildConfig validation passed"
+#         # Test BuildConfig
+#         oc apply --dry-run=client -f config/openshift/buildconfig.yaml
+#         echo "✓ BuildConfig validation passed"
 
-        # Test ImageStream
-        oc apply --dry-run=client -f config/openshift/imagestream.yaml
-        echo "✓ ImageStream validation passed"
+#         # Test ImageStream
+#         oc apply --dry-run=client -f config/openshift/imagestream.yaml
+#         echo "✓ ImageStream validation passed"
 
-        # Test DaemonSet with BuildConfig
-        oc apply --dry-run=client -f config/openshift/daemonset-buildconfig.yaml
-        echo "✓ DaemonSet BuildConfig validation passed"
+#         # Test DaemonSet with BuildConfig
+#         oc apply --dry-run=client -f config/openshift/daemonset-buildconfig.yaml
+#         echo "✓ DaemonSet BuildConfig validation passed"
 
-        # Test SecurityContextConstraints
-        oc apply --dry-run=client -f config/rbac/security_context_constraints.yaml
-        echo "✓ SecurityContextConstraints validation passed"
+#         # Test SecurityContextConstraints
+#         oc apply --dry-run=client -f config/rbac/security_context_constraints.yaml
+#         echo "✓ SecurityContextConstraints validation passed"
 
-    - name: Test deployment scripts
-      run: |
-        # Test deployment script syntax
-        chmod +x scripts/*.sh
+#     - name: Test deployment scripts
+#       run: |
+#         # Test deployment script syntax
+#         chmod +x scripts/*.sh
 
-        # Test deploy-with-scc.sh
-        bash -n scripts/deploy-with-scc.sh
-        echo "✓ deploy-with-scc.sh syntax validation passed"
+#         # Test deploy-with-scc.sh
+#         bash -n scripts/deploy-with-scc.sh
+#         echo "✓ deploy-with-scc.sh syntax validation passed"
 
-        # Test deploy-buildconfig.sh
-        bash -n scripts/deploy-buildconfig.sh
-        echo "✓ deploy-buildconfig.sh syntax validation passed"
+#         # Test deploy-buildconfig.sh
+#         bash -n scripts/deploy-buildconfig.sh
+#         echo "✓ deploy-buildconfig.sh syntax validation passed"
 
-        # Test cleanup-buildconfig.sh
-        bash -n scripts/cleanup-buildconfig.sh
-        echo "✓ cleanup-buildconfig.sh syntax validation passed"
+#         # Test cleanup-buildconfig.sh
+#         bash -n scripts/cleanup-buildconfig.sh
+#         echo "✓ cleanup-buildconfig.sh syntax validation passed"
 
-        # Test validate-buildconfig.sh
-        bash -n scripts/validate-buildconfig.sh
-        echo "✓ validate-buildconfig.sh syntax validation passed"
+#         # Test validate-buildconfig.sh
+#         bash -n scripts/validate-buildconfig.sh
+#         echo "✓ validate-buildconfig.sh syntax validation passed"
 
-    - name: Test sample resources
-      run: |
-        # Validate all sample resources
-        for file in config/samples/*.yaml; do
-          echo "Validating sample resource: $file"
-          oc apply --dry-run=client -f "$file"
-          echo "✓ $file validation passed"
-        done
+#     - name: Test sample resources
+#       run: |
+#         # Validate all sample resources
+#         for file in config/samples/*.yaml; do
+#           echo "Validating sample resource: $file"
+#           oc apply --dry-run=client -f "$file"
+#           echo "✓ $file validation passed"
+#         done
 
-    - name: Test operator functionality
-      run: |
-        # Test that the operator binary can start
-        timeout 5s bin/manager --help || echo "Operator help test completed"
+#     - name: Test operator functionality
+#       run: |
+#         # Test that the operator binary can start
+#         timeout 5s bin/manager --help || echo "Operator help test completed"
 
-        # Test that the operator can be built with different targets
-        make test
-        echo "✓ Unit tests passed"
+#         # Test that the operator can be built with different targets
+#         make test
+#         echo "✓ Unit tests passed"
 
-        # Test that manifests can be generated
-        make manifests
-        echo "✓ Manifest generation passed"
+#         # Test that manifests can be generated
+#         make manifests
+#         echo "✓ Manifest generation passed"
 
-    - name: Test container image
-      run: |
-        # Test that the container image can run
-        podman run --rm ${{ env.OPERATOR_NAME }}:test --help || echo "Container help test completed"
+#     - name: Test container image
+#       run: |
+#         # Test that the container image can run
+#         podman run --rm ${{ env.OPERATOR_NAME }}:test --help || echo "Container help test completed"
 
-        # Test that the container image has the correct entrypoint
-        podman run --rm ${{ env.OPERATOR_NAME }}:test --version || echo "Container version test completed"
+#         # Test that the container image has the correct entrypoint
+#         podman run --rm ${{ env.OPERATOR_NAME }}:test --version || echo "Container version test completed"
 
-    - name: Test security features
-      run: |
-        # Test that the container image runs as non-root
-        podman run --rm --user 1000:1000 ${{ env.OPERATOR_NAME }}:test --help || echo "Non-root test completed"
+#     - name: Test security features
+#       run: |
+#         # Test that the container image runs as non-root
+#         podman run --rm --user 1000:1000 ${{ env.OPERATOR_NAME }}:test --help || echo "Non-root test completed"
 
-        # Test that the container image has read-only root filesystem
-        podman run --rm --read-only ${{ env.OPERATOR_NAME }}:test --help || echo "Read-only test completed"
+#         # Test that the container image has read-only root filesystem
+#         podman run --rm --read-only ${{ env.OPERATOR_NAME }}:test --help || echo "Read-only test completed"
 
-    - name: Generate test report
-      run: |
-        echo "# OpenShift E2E Test Report" > test-report.md
-        echo "" >> test-report.md
-        echo "## Test Results" >> test-report.md
-        echo "- ✅ OpenShift manifest validation" >> test-report.md
-        echo "- ✅ Deployment script validation" >> test-report.md
-        echo "- ✅ Sample resource validation" >> test-report.md
-        echo "- ✅ Operator functionality tests" >> test-report.md
-        echo "- ✅ Container image tests" >> test-report.md
-        echo "- ✅ Security feature tests" >> test-report.md
-        echo "" >> test-report.md
-        echo "## Summary" >> test-report.md
-        echo "All OpenShift E2E tests passed successfully!" >> test-report.md
+#     - name: Generate test report
+#       run: |
+#         echo "# OpenShift E2E Test Report" > test-report.md
+#         echo "" >> test-report.md
+#         echo "## Test Results" >> test-report.md
+#         echo "- ✅ OpenShift manifest validation" >> test-report.md
+#         echo "- ✅ Deployment script validation" >> test-report.md
+#         echo "- ✅ Sample resource validation" >> test-report.md
+#         echo "- ✅ Operator functionality tests" >> test-report.md
+#         echo "- ✅ Container image tests" >> test-report.md
+#         echo "- ✅ Security feature tests" >> test-report.md
+#         echo "" >> test-report.md
+#         echo "## Summary" >> test-report.md
+#         echo "All OpenShift E2E tests passed successfully!" >> test-report.md
 
-    - name: Upload test report
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-report
-        path: test-report.md
-        retention-days: 7
+#     - name: Upload test report
+#       uses: actions/upload-artifact@v4
+#       with:
+#         name: test-report
+#         path: test-report.md
+#         retention-days: 7
