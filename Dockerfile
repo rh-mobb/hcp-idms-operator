@@ -15,7 +15,7 @@
 # Build the manager binary
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest AS builder
 
-LABEL org.opencontainers.image.source https://github.com/rh-mobb/hcp-idms-operator
+LABEL org.opencontainers.image.source=https://github.com/rh-mobb/hcp-idms-operator
 
 # Install Go
 RUN microdnf install -y go-toolset && microdnf clean all
