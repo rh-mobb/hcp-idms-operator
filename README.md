@@ -28,6 +28,11 @@ This operator watches for `ImageDigestMirrorSet` custom resources and generates 
 ### Deploy to OpenShift
 
 ```bash
+# Patch the mirror admission policy to only block on the hypershift label
+oc get validatingadmissionpolicy mirror &> /dev/null && oc patch validatingadmissionpolicy mirror --type=json -p='[{"op": "add", "path": "/spec/matchConstraints/objectSelector", "value": {"matchExpressions":[{"key":"hypershift.openshift.io/managed","operator":"In","values":["true"]}]}}]'
+```
+
+```bash
 # Clone the repository
 git clone https://github.com/rh-mobb/hcp-idms-operator.git
 cd hcp-idms-operator
@@ -122,6 +127,8 @@ spec:
 
 ## Troubleshooting
 
+### Common Issues
+
 ```bash
 # Check operator logs
 oc logs -n openshift-hcp-idms-operator -l app=hcp-idms-operator
@@ -132,6 +139,7 @@ oc exec -n openshift-hcp-idms-operator -l app=hcp-idms-operator -- cat /etc/cont
 # Check CRI-O status
 oc exec -n openshift-hcp-idms-operator -l app=hcp-idms-operator -- systemctl status crio
 ```
+
 
 ## Security
 
