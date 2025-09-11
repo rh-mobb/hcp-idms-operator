@@ -21,6 +21,15 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Debug - List directory contents
+      run: |
+        echo "=== Root directory ==="
+        ls -la
+        echo "=== cmd directory ==="
+        ls -la cmd/ || echo "cmd directory not found"
+        echo "=== cmd/manager directory ==="
+        ls -la cmd/manager/ || echo "cmd/manager directory not found"
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
@@ -46,7 +55,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
