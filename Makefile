@@ -114,7 +114,7 @@ podman-build: #test
 
 # Build the podman image for x86 architecture
 podman-build-x86: #test
-	podman build --platform linux/amd64 -t ${IMG}-x86 .
+	podman build --platform linux/amd64 -t ${IMG} .
 
 # Push the podman image
 podman-push:
@@ -122,7 +122,7 @@ podman-push:
 
 # Push the x86 podman image
 podman-push-x86:
-	podman push ${IMG}-x86
+	podman push ${IMG}
 
 # Run CI tests locally
 ci: test fmt vet manifests

@@ -17,7 +17,7 @@ spec:
       serviceAccountName: hcp-idms-operator
       containers:
       - name: manager
-        image: ghcr.io/rh-mobb/hcp-idms-operator:latest-x86
+        image: ghcr.io/rh-mobb/hcp-idms-operator:latest
         imagePullPolicy: Always
         command:
         - /manager
