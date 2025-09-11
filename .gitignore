@@ -34,7 +34,9 @@ ehthumbs.db
 Thumbs.db
 
 # Temporary files
-bin/manager
+bin/*
+manager
+build-temp/
 
 # Build artifacts
 build/

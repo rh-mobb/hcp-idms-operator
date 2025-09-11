@@ -37,10 +37,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o mana
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
 # Install necessary packages
-RUN microdnf install -y ca-certificates && microdnf clean all
-
-# Create non-root user
-RUN useradd -u 65532 -g 65532 -s /bin/false -m manager
+RUN microdnf install -y ca-certificates systemd procps-ng && microdnf clean all
 
 # Set working directory
 WORKDIR /
@@ -48,11 +45,8 @@ WORKDIR /
 # Copy the binary from builder stage
 COPY --from=builder /workspace/manager /manager
 
-# Change ownership
-RUN chown 65532:65532 /manager
-
-# Switch to non-root user
-USER 65532:65532
+# Make binary executable
+RUN chmod +x /manager
 
 # Expose ports
 EXPOSE 8080 8081

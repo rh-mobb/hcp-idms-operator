@@ -15,25 +15,9 @@ spec:
         app: hcp-idms-operator
     spec:
       serviceAccountName: hcp-idms-operator
-      initContainers:
-      - name: setup-registry-dir
-        image: registry.access.redhat.com/ubi8/ubi-minimal:latest
-        command:
-        - /bin/bash
-        - -c
-        - |
-          mkdir -p /etc/containers/registry.conf.d
-          chown -R 65532:65532 /etc/containers/registry.conf.d
-          chmod -R 755 /etc/containers/registry.conf.d
-        securityContext:
-          runAsUser: 0
-          runAsGroup: 0
-        volumeMounts:
-        - name: registry-config
-          mountPath: /etc/containers/registry.conf.d
       containers:
       - name: manager
-            image: ghcr.io/openshift/hcp-idms-operator:latest
+        image: image-registry.openshift-image-registry.svc:5000/openshift-hcp-idms-operator/hcp-idms-operator:latest
         imagePullPolicy: Always
         command:
         - /manager
@@ -79,20 +63,19 @@ spec:
             cpu: 100m
             memory: 128Mi
         securityContext:
-          allowPrivilegeEscalation: false
+          privileged: true
+          allowPrivilegeEscalation: true
           capabilities:
             add:
             - SYS_ADMIN
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 65532
-          runAsGroup: 65532
-          fsGroup: 65532
+            drop: []
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          runAsGroup: 0
         volumeMounts:
         - name: registry-config
-          mountPath: /etc/containers/registry.conf.d
+          mountPath: /etc/containers/registries.conf.d
         - name: tmp
           mountPath: /tmp
         - name: sys
@@ -101,7 +84,7 @@ spec:
       volumes:
       - name: registry-config
         hostPath:
-          path: /etc/containers/registry.conf.d
+          path: /etc/containers/registries.conf.d
           type: DirectoryOrCreate
       - name: tmp
         emptyDir: {}

@@ -7,8 +7,8 @@ set -e
 echo "Cleaning up hcp-idms-operator BuildConfig deployment..."
 
 # Check if we're in an OpenShift cluster
-if ! oc get crd buildconfigs.build.openshift.io >/dev/null 2>&1; then
-    echo "Error: This script requires an OpenShift cluster with BuildConfig support"
+if ! oc whoami >/dev/null 2>&1; then
+    echo "Error: This script requires an OpenShift cluster"
     echo "Please ensure you're connected to an OpenShift cluster"
     exit 1
 fi

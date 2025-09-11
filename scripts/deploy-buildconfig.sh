@@ -13,28 +13,16 @@ if ! oc whoami >/dev/null 2>&1; then
     exit 1
 fi
 
+# Create namespace if it doesn't exist
+oc create namespace openshift-hcp-idms-operator --dry-run=client -o yaml | oc apply -f -
+
+
 # Check if we're in the right namespace
 CURRENT_NS=$(oc config view --minify -o jsonpath='{..namespace}')
 if [ "$CURRENT_NS" != "openshift-hcp-idms-operator" ]; then
     echo "Switching to openshift-hcp-idms-operator namespace..."
     oc config set-context --current --namespace=openshift-hcp-idms-operator
 fi
-
-# Build the operator binary first
-echo "Building operator binary for Linux AMD64..."
-GOOS=linux GOARCH=amd64 make manager
-
-# Verify binary exists
-if [ ! -f "bin/manager" ]; then
-    echo "Error: Binary not found at bin/manager"
-    exit 1
-fi
-
-# Binary is ready in bin/manager
-echo "Binary ready for BuildConfig..."
-
-# Create namespace if it doesn't exist
-oc create namespace openshift-hcp-idms-operator --dry-run=client -o yaml | oc apply -f -
 
 # Apply RBAC first
 echo "Applying RBAC..."
@@ -54,14 +42,24 @@ oc apply -f config/openshift/imagestream.yaml
 echo "Creating BuildConfig..."
 oc apply -f config/openshift/buildconfig.yaml
 
-# Start the build with only the binary
-echo "Starting build from local binary..."
-oc start-build hcp-idms-operator --from-file=bin/manager --follow
+# Build the binary first for x86 architecture
+echo "Building operator binary for x86 architecture..."
+GOOS=linux GOARCH=amd64 make manager
+
+# Create temporary build directory
+echo "Preparing build context..."
+mkdir -p build-temp
+cp bin/manager build-temp/manager
+cp Dockerfile.binary build-temp/Dockerfile
+
+# Start the build with binary and Dockerfile
+echo "Starting build from pre-built binary..."
+oc start-build hcp-idms-operator --from-dir=build-temp --follow
 
 # Wait for the build to complete
 echo "Waiting for build to complete..."
 BUILD_NAME=$(oc get builds -o name | grep hcp-idms-operator | tail -1 | cut -d'/' -f2)
-oc wait --for=condition=complete build/$BUILD_NAME --timeout=300s
+oc wait --for=condition=complete build/$BUILD_NAME
 
 # Apply the DaemonSet with BuildConfig image
 echo "Applying DaemonSet with BuildConfig image..."
@@ -76,7 +74,10 @@ echo "  oc get imagestream -n openshift-hcp-idms-operator"
 echo "  oc logs -f build/\$BUILD_NAME"
 echo ""
 echo "To rebuild and redeploy:"
-echo "  GOOS=linux GOARCH=amd64 make manager && oc start-build hcp-idms-operator --from-file=bin/manager --follow"
+echo "GOOS=linux GOARCH=amd64 make manager && mkdir -p build-temp && cp bin/manager build-temp/manager && cp Dockerfile.binary build-temp/Dockerfile && oc start-build hcp-idms-operator --from-dir=build-temp --follow && rm -rf build-temp"
 
-# No cleanup needed - using binary directly from bin/
+# Clean up temporary build directory
+echo "Cleaning up temporary build directory..."
+rm -rf build-temp
+
 echo "Build complete!"

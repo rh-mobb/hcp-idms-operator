@@ -15,25 +15,9 @@ spec:
         app: hcp-idms-operator
     spec:
       serviceAccountName: hcp-idms-operator
-      initContainers:
-      - name: setup-registry-dir
-        image: registry.access.redhat.com/ubi8/ubi-minimal:latest
-        command:
-        - /bin/bash
-        - -c
-        - |
-          mkdir -p /etc/containers/registry.conf.d
-          chown -R 65532:65532 /etc/containers/registry.conf.d
-          chmod -R 755 /etc/containers/registry.conf.d
-        securityContext:
-          runAsUser: 0
-          runAsGroup: 0
-        volumeMounts:
-        - name: registry-config
-          mountPath: /etc/containers/registry.conf.d
       containers:
       - name: manager
-            image: ghcr.io/openshift/hcp-idms-operator:latest
+        image: ghcr.io/rh-mobb/hcp-idms-operator:latest-x86
         imagePullPolicy: Always
         command:
         - /manager
@@ -52,6 +36,10 @@ spec:
               fieldPath: metadata.name
         - name: OPERATOR_NAME
           value: "hcp-idms-operator"
+        - name: SYSTEMD_IGNORE_CHROOT
+          value: "1"
+        - name: DBUS_SYSTEM_BUS_ADDRESS
+          value: "unix:path=/var/run/dbus/system_bus_socket"
         ports:
         - containerPort: 8080
           name: metrics
@@ -79,36 +67,57 @@ spec:
             cpu: 100m
             memory: 128Mi
         securityContext:
-          allowPrivilegeEscalation: false
+          privileged: true
+          allowPrivilegeEscalation: true
           capabilities:
             add:
             - SYS_ADMIN
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 65532
-          runAsGroup: 65532
-          fsGroup: 65532
+            drop: []
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          runAsGroup: 0
         volumeMounts:
         - name: registry-config
-          mountPath: /etc/containers/registry.conf.d
+          mountPath: /etc/containers/registries.conf.d
         - name: tmp
           mountPath: /tmp
         - name: sys
           mountPath: /sys
           readOnly: true
+        - name: systemd-socket
+          mountPath: /var/run/systemd/system
+          readOnly: true
+        - name: systemd-socket
+          mountPath: /run/systemd/system
+          readOnly: true
+        - name: systemd-socket
+          mountPath: /etc/systemd/system
+          readOnly: true
+        - name: systemd-socket
+          mountPath: /var/run/dbus
+          readOnly: true
+        - name: dbus-socket
+          mountPath: /var/run/dbus/system_bus_socket
+          readOnly: true
       volumes:
       - name: registry-config
         hostPath:
-          path: /etc/containers/registry.conf.d
-          type: DirectoryOrCreate
+          path: /etc/containers/registries.conf.d
       - name: tmp
         emptyDir: {}
       - name: sys
         hostPath:
           path: /sys
           type: Directory
+      - name: systemd-socket
+        hostPath:
+          path: /var/run/systemd/system
+          type: DirectoryOrCreate
+      - name: dbus-socket
+        hostPath:
+          path: /var/run/dbus/system_bus_socket
+          type: Socket
       nodeSelector:
         kubernetes.io/os: linux
       tolerations:

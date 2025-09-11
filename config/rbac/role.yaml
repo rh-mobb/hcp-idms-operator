@@ -7,7 +7,7 @@ rules:
 - apiGroups:
   - config.openshift.io
   resources:
-  - imagemirrordigestsets
+  - imagedigestmirrorsets
   verbs:
   - create
   - delete
@@ -19,13 +19,13 @@ rules:
 - apiGroups:
   - config.openshift.io
   resources:
-  - imagemirrordigestsets/finalizers
+  - imagedigestmirrorsets/finalizers
   verbs:
   - update
 - apiGroups:
   - config.openshift.io
   resources:
-  - imagemirrordigestsets/status
+  - imagedigestmirrorsets/status
   verbs:
   - get
   - patch

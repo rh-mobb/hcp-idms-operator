@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= quay.io/openshift/hcp-idms-operator:latest
+IMG ?= ghcr.io/rh-mobb/hcp-idms-operator:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:crdVersions=v1"
 
@@ -57,6 +57,7 @@ deploy-daemonset-openshift: manifests kustomize
 
 # Deploy using BuildConfig for local development on OpenShift
 deploy-buildconfig: manifests
+
 	./scripts/deploy-buildconfig.sh
 
 # Clean up BuildConfig deployment
@@ -108,12 +109,20 @@ rm -rf $$TMP_DIR ;\
 endef
 
 # Build the podman image
-podman-build: test
+podman-build: #test
 	podman build -t ${IMG} .
+
+# Build the podman image for x86 architecture
+podman-build-x86: #test
+	podman build --platform linux/amd64 -t ${IMG}-x86 .
 
 # Push the podman image
 podman-push:
 	podman push ${IMG}
+
+# Push the x86 podman image
+podman-push-x86:
+	podman push ${IMG}-x86
 
 # Run CI tests locally
 ci: test fmt vet manifests
@@ -130,4 +139,4 @@ test-ci: test fmt vet manifests build
 	@echo "All CI tests passed!"
 
 
-.PHONY: all test manager run install uninstall deploy deploy-daemonset deploy-daemonset-openshift deploy-buildconfig cleanup-buildconfig undeploy manifests fmt vet generate controller-gen kustomize podman-build podman-push ci test-ci
+.PHONY: all test manager run install uninstall deploy deploy-daemonset deploy-daemonset-openshift deploy-buildconfig cleanup-buildconfig undeploy manifests fmt vet generate controller-gen kustomize podman-build podman-build-x86 podman-push podman-push-x86 ci test-ci

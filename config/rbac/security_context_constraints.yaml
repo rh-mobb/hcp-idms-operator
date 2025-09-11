@@ -7,25 +7,18 @@ allowHostIPC: false
 allowHostNetwork: false
 allowHostPID: false
 allowHostPorts: false
-allowPrivilegeEscalation: false
-allowPrivilegedContainer: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: true
 allowedCapabilities:
-- SYS_ADMIN
+- '*'
 defaultAddCapabilities: null
 fsGroup:
-  type: MustRunAs
-  ranges:
-  - min: 65532
-    max: 65532
-readOnlyRootFilesystem: true
-requiredDropCapabilities:
-- ALL
+  type: RunAsAny
+readOnlyRootFilesystem: false
 runAsUser:
   type: RunAsAny
 seLinuxContext:
-  type: MustRunAs
-  seLinuxOptions:
-    level: "s0:c123,c456"
+  type: RunAsAny
 volumes:
 - configMap
 - downwardAPI

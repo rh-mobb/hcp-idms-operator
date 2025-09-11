@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1alpha1
+package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ImageMirrorDigestSetSpec defines the desired state of ImageMirrorDigestSet
-type ImageMirrorDigestSetSpec struct {
-	// Mirrors defines the registry mirrors for this set
-	Mirrors []RegistryMirror `json:"mirrors"`
+// ImageDigestMirrorSetSpec defines the desired state of ImageDigestMirrorSet
+type ImageDigestMirrorSetSpec struct {
+	// ImageDigestMirrors defines the registry mirrors for this set
+	ImageDigestMirrors []ImageDigestMirror `json:"imageDigestMirrors"`
 }
 
-// RegistryMirror defines a registry mirror configuration
-type RegistryMirror struct {
+// ImageDigestMirror defines a registry mirror configuration
+type ImageDigestMirror struct {
 	// Source is the source registry URL
 	Source string `json:"source"`
 	// Mirrors is a list of mirror URLs for the source registry
@@ -34,8 +34,8 @@ type RegistryMirror struct {
 	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 }
 
-// ImageMirrorDigestSetStatus defines the observed state of ImageMirrorDigestSet
-type ImageMirrorDigestSetStatus struct {
+// ImageDigestMirrorSetStatus defines the observed state of ImageDigestMirrorSet
+type ImageDigestMirrorSetStatus struct {
 	// Conditions represent the latest available observations of the object's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// ObservedGeneration is the generation of the resource that was last processed
@@ -44,27 +44,27 @@ type ImageMirrorDigestSetStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:resource:scope=Cluster,shortName=idms
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// ImageMirrorDigestSet is the Schema for the imagemirrordigestsets API
-type ImageMirrorDigestSet struct {
+// ImageDigestMirrorSet is the Schema for the imagedigestmirrorsets API
+type ImageDigestMirrorSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ImageMirrorDigestSetSpec   `json:"spec,omitempty"`
-	Status ImageMirrorDigestSetStatus `json:"status,omitempty"`
+	Spec   ImageDigestMirrorSetSpec   `json:"spec,omitempty"`
+	Status ImageDigestMirrorSetStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// ImageMirrorDigestSetList contains a list of ImageMirrorDigestSet
-type ImageMirrorDigestSetList struct {
+// ImageDigestMirrorSetList contains a list of ImageDigestMirrorSet
+type ImageDigestMirrorSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ImageMirrorDigestSet `json:"items"`
+	Items           []ImageDigestMirrorSet `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ImageMirrorDigestSet{}, &ImageMirrorDigestSetList{})
+	SchemeBuilder.Register(&ImageDigestMirrorSet{}, &ImageDigestMirrorSetList{})
 }

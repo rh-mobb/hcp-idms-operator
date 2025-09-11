@@ -4,24 +4,26 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: imagemirrordigestsets.config.openshift.io
+  name: imagedigestmirrorsets.config.openshift.io
 spec:
   group: config.openshift.io
   names:
-    kind: ImageMirrorDigestSet
-    listKind: ImageMirrorDigestSetList
-    plural: imagemirrordigestsets
-    singular: imagemirrordigestset
+    kind: ImageDigestMirrorSet
+    listKind: ImageDigestMirrorSetList
+    plural: imagedigestmirrorsets
+    shortNames:
+    - idms
+    singular: imagedigestmirrorset
   scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
-        description: ImageMirrorDigestSet is the Schema for the imagemirrordigestsets
+        description: ImageDigestMirrorSet is the Schema for the imagedigestmirrorsets
           API
         properties:
           apiVersion:
@@ -42,12 +44,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: ImageMirrorDigestSetSpec defines the desired state of ImageMirrorDigestSet
+            description: ImageDigestMirrorSetSpec defines the desired state of ImageDigestMirrorSet
             properties:
-              mirrors:
-                description: Mirrors defines the registry mirrors for this set
+              imageDigestMirrors:
+                description: ImageDigestMirrors defines the registry mirrors for this
+                  set
                 items:
-                  description: RegistryMirror defines a registry mirror configuration
+                  description: ImageDigestMirror defines a registry mirror configuration
                   properties:
                     insecureSkipTLSVerify:
                       description: InsecureSkipTLSVerify indicates whether to skip
@@ -68,11 +71,11 @@ spec:
                   type: object
                 type: array
             required:
-            - mirrors
+            - imageDigestMirrors
             type: object
           status:
-            description: ImageMirrorDigestSetStatus defines the observed state of
-              ImageMirrorDigestSet
+            description: ImageDigestMirrorSetStatus defines the observed state of
+              ImageDigestMirrorSet
             properties:
               conditions:
                 description: Conditions represent the latest available observations
