@@ -55,14 +55,6 @@ deploy-daemonset: manifests kustomize
 deploy-daemonset-openshift: manifests kustomize
 	./scripts/deploy-with-scc.sh
 
-# Deploy using BuildConfig for local development on OpenShift
-deploy-buildconfig: manifests
-
-	./scripts/deploy-buildconfig.sh
-
-# Clean up BuildConfig deployment
-cleanup-buildconfig:
-	./scripts/cleanup-buildconfig.sh
 
 # UnDeploy controller from the configured Kubernetes cluster in ~/.kube/config
 undeploy: kustomize
@@ -139,4 +131,4 @@ test-ci: test fmt vet manifests build
 	@echo "All CI tests passed!"
 
 
-.PHONY: all test manager run install uninstall deploy deploy-daemonset deploy-daemonset-openshift deploy-buildconfig cleanup-buildconfig undeploy manifests fmt vet generate controller-gen kustomize podman-build podman-build-x86 podman-push podman-push-x86 ci test-ci
+.PHONY: all test manager run install uninstall deploy deploy-daemonset deploy-daemonset-openshift undeploy manifests fmt vet generate controller-gen kustomize podman-build podman-build-x86 podman-push podman-push-x86 ci test-ci
