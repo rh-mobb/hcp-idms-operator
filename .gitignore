@@ -35,7 +35,6 @@ Thumbs.db
 
 # Temporary files
 bin/*
-manager
 build-temp/
 
 # Build artifacts
