@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hcp-idms-operator
+  namespace: openshift-hcp-idms-operator
+  labels:
+    app: hcp-idms-operator
+spec:
+  selector:
+    matchLabels:
+      app: hcp-idms-operator
+  template:
+    metadata:
+      labels:
+        app: hcp-idms-operator
+    spec:
+      serviceAccountName: hcp-idms-operator
+      containers:
+      - name: manager
+        image: ghcr.io/rh-mobb/hcp-idms-operator:latest-x86
+        imagePullPolicy: Always
+        command:
+        - /manager
+        args:
+        - --leader-elect=false
+        - --metrics-bind-address=0.0.0.0:8080
+        - --health-probe-bind-address=0.0.0.0:8081
+        env:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: "hcp-idms-operator"
+        - name: SYSTEMD_IGNORE_CHROOT
+          value: "1"
+        - name: DBUS_SYSTEM_BUS_ADDRESS
+          value: "unix:path=/var/run/dbus/system_bus_socket"
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          privileged: true
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+            drop: []
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          runAsGroup: 0
+        volumeMounts:
+        - name: registry-config
+          mountPath: /etc/containers/registries.conf.d
+        - name: tmp
+          mountPath: /tmp
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: systemd-socket
+          mountPath: /var/run/systemd/system
+          readOnly: true
+        - name: systemd-socket
+          mountPath: /run/systemd/system
+          readOnly: true
+        - name: systemd-socket
+          mountPath: /etc/systemd/system
+          readOnly: true
+        - name: systemd-socket
+          mountPath: /var/run/dbus
+          readOnly: true
+        - name: dbus-socket
+          mountPath: /var/run/dbus/system_bus_socket
+          readOnly: true
+      volumes:
+      - name: registry-config
+        hostPath:
+          path: /etc/containers/registries.conf.d
+      - name: tmp
+        emptyDir: {}
+      - name: sys
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: systemd-socket
+        hostPath:
+          path: /var/run/systemd/system
+          type: DirectoryOrCreate
+      - name: dbus-socket
+        hostPath:
+          path: /var/run/dbus/system_bus_socket
+          type: Socket
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      - operator: Exists
+        effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        tolerationSeconds: 300
+      - operator: Exists
+        effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        tolerationSeconds: 300

@@ -1,0 +1,222 @@
+// Copyright 2024 Red Hat, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package controller
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	configv1 "github.com/openshift/hcp-idms-operator/api/v1"
+)
+
+// ImageDigestMirrorSetReconciler reconciles a ImageDigestMirrorSet object
+type ImageDigestMirrorSetReconciler struct {
+	client.Client
+	Scheme *runtime.Scheme
+}
+
+// +kubebuilder:rbac:groups=config.openshift.io,resources=imagedigestmirrorsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=config.openshift.io,resources=imagedigestmirrorsets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=config.openshift.io,resources=imagedigestmirrorsets/finalizers,verbs=update
+
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+func (r *ImageDigestMirrorSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
+	// Fetch the ImageDigestMirrorSet instance
+	instance := &configv1.ImageDigestMirrorSet{}
+	err := r.Get(ctx, req.NamespacedName, instance)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Object not found, return.  Created objects are automatically garbage collected.
+			// For additional cleanup logic use finalizers.
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		log.Error(err, "Failed to get ImageMirrorDigestSet")
+		return ctrl.Result{}, err
+	}
+
+	// Check if this is the "default" resource and ignore it
+	if instance.Name == "default" {
+		log.Info("Ignoring default ImageMirrorDigestSet resource")
+		return ctrl.Result{}, nil
+	}
+
+	// Check if this resource is managed by Hypershift and ignore it
+	if instance.Labels != nil && instance.Labels["hypershift.openshift.io/managed"] == "true" {
+		log.Info("Ignoring Hypershift-managed ImageMirrorDigestSet resource", "name", instance.Name)
+		return ctrl.Result{}, nil
+	}
+
+	// Generate registry configuration file
+	err = r.generateRegistryConfig(instance)
+	if err != nil {
+		log.Error(err, "Failed to generate registry configuration")
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Successfully processed ImageDigestMirrorSet", "name", instance.Name)
+	return ctrl.Result{}, nil
+}
+
+// generateRegistryConfig creates a registry configuration file for the given ImageDigestMirrorSet
+func (r *ImageDigestMirrorSetReconciler) generateRegistryConfig(instance *configv1.ImageDigestMirrorSet) error {
+	// Check if we're running in debug mode (local testing)
+	debugMode := os.Getenv("DEBUG_MODE") == "true" || os.Getenv("LOCAL_TESTING") == "true"
+
+	if debugMode {
+		// In debug mode, just log the configuration content instead of writing files
+		configContent := r.generateRegistryConfigContent(instance)
+		fmt.Printf("=== DEBUG MODE: Configuration for %s ===\n", instance.Name)
+		fmt.Printf("File would be written to: /etc/containers/registries.conf.d/%s.conf\n", instance.Name)
+		fmt.Printf("Content:\n%s\n", configContent)
+		fmt.Printf("=== END DEBUG MODE ===\n")
+		return nil
+	}
+
+	// Production mode: write to actual filesystem
+	// The registries.conf.d directory is created by OpenShift and owned by root
+	registryDir := "/etc/containers/registries.conf.d"
+
+	// Check if file already exists and verify ownership
+	configFile := filepath.Join(registryDir, fmt.Sprintf("%s.conf", instance.Name))
+	if err := r.verifyFileOwnership(configFile); err != nil {
+		return fmt.Errorf("file ownership verification failed: %w", err)
+	}
+
+	// Generate the configuration file content
+	configContent := r.generateRegistryConfigContent(instance)
+
+	// Write the configuration file
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		return fmt.Errorf("failed to write registry configuration file: %w", err)
+	}
+
+	// Reload CRI-O after writing configuration
+	if err := r.reloadCRIO(); err != nil {
+		// Log error but don't return it as the config file was written successfully
+		// CRI-O will pick up the changes on its next check
+		fmt.Printf("Failed to reload CRI-O for %s: %v\n", configFile, err)
+	} else {
+		fmt.Printf("Successfully reloaded CRI-O for %s\n", configFile)
+	}
+
+	return nil
+}
+
+// verifyFileOwnership checks if a file exists and if it's owned by this operator
+func (r *ImageDigestMirrorSetReconciler) verifyFileOwnership(filePath string) error {
+	// If file doesn't exist, it's safe to create
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	// Read the first line of the existing file
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open existing file: %w", err)
+	}
+	defer file.Close()
+
+	// Read the first line
+	scanner := bufio.NewScanner(file)
+	if !scanner.Scan() {
+		// File is empty, safe to overwrite
+		return nil
+	}
+
+	firstLine := scanner.Text()
+	expectedHeader := "# Generated by hcp-idms-operator"
+
+	// Check if the first line matches our expected header
+	if firstLine != expectedHeader {
+		return fmt.Errorf("file %s is not owned by hcp-idms-operator (first line: %q, expected: %q)", filePath, firstLine, expectedHeader)
+	}
+
+	return nil
+}
+
+// generateRegistryConfigContent generates the TOML content for the registry configuration
+func (r *ImageDigestMirrorSetReconciler) generateRegistryConfigContent(instance *configv1.ImageDigestMirrorSet) string {
+	var content strings.Builder
+
+	content.WriteString("# Generated by hcp-idms-operator\n")
+	content.WriteString("# Source: ImageDigestMirrorSet " + instance.Name + "\n")
+	content.WriteString("# Generated at: " + time.Now().Format(time.RFC3339) + "\n\n")
+
+	for _, mirror := range instance.Spec.ImageDigestMirrors {
+		content.WriteString("[[registry]]\n")
+		content.WriteString(fmt.Sprintf("  location = \"%s\"\n", mirror.Source))
+		content.WriteString("  prefix = \"\"\n\n")
+
+		for _, mirrorURL := range mirror.Mirrors {
+			content.WriteString("  [[registry.mirror]]\n")
+			content.WriteString(fmt.Sprintf("    location = \"%s\"\n", mirrorURL))
+		}
+
+		if mirror.InsecureSkipTLSVerify {
+			content.WriteString("  insecure = true\n")
+		}
+		content.WriteString("\n")
+	}
+
+	return content.String()
+}
+
+// reloadCRIO attempts to reload CRI-O configuration
+func (r *ImageDigestMirrorSetReconciler) reloadCRIO() error {
+	// Skip CRI-O reload in debug mode
+	debugMode := os.Getenv("DEBUG_MODE") == "true" || os.Getenv("LOCAL_TESTING") == "true"
+	if debugMode {
+		fmt.Printf("DEBUG MODE: Skipping CRI-O reload\n")
+		return nil
+	}
+
+	// Try to reload CRI-O using systemctl
+	cmd := exec.Command("systemctl", "reload", "crio")
+	if err := cmd.Run(); err != nil {
+		// If systemctl fails, try using pkill to send SIGHUP to crio process
+		fmt.Printf("systemctl reload failed, trying pkill approach: %v\n", err)
+
+		// Find crio process and send SIGHUP
+		cmd = exec.Command("pkill", "-HUP", "crio")
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to reload CRI-O: systemctl error: %v, pkill error: %v", err, err)
+		}
+	}
+
+	return nil
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *ImageDigestMirrorSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&configv1.ImageDigestMirrorSet{}).
+		Complete(r)
+}

@@ -1,0 +1,99 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+docs/
+*.md
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build artifacts
+bin/
+dist/
+build/
+manager
+manager-linux
+manager-windows
+manager-darwin
+
+# Test files
+*_test.go
+test/
+coverage.out
+cover.out
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+build-temp/
+manager
+
+# Logs
+*.log
+logs/
+
+# Node modules (if any)
+node_modules/
+npm-debug.log*
+
+# Python files (if any)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+
+# Go specific
+vendor/
+go.work
+go.work.sum
+
+# Coverage files
+*.out
+coverage.html
+
+# Editor backup files
+*~
+*.bak
+*.backup
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# Build scripts (keep only essential ones)
+scripts/quick-build.sh
+scripts/validate-buildconfig.sh
+
+# Keep essential files for build:
+# - cmd/ (source code)
+# - internal/ (source code)
+# - api/ (source code)
+# - config/ (manifests)
+# - go.mod, go.sum (dependencies)
+# - Dockerfile.binary (build instructions)
+# - Makefile (build instructions)

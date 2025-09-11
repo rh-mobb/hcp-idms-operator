@@ -1,0 +1,64 @@
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
+metadata:
+  name: quay-mirror
+  labels:
+    app.kubernetes.io/name: imagedigestmirrorset
+    app.kubernetes.io/instance: quay-mirror
+    app.kubernetes.io/part-of: hcp-idms-operator
+spec:
+  imageDigestMirrors:
+  - source: "quay.io"
+    mirrors:
+    - "mirror-registry.example.com/quay"
+    - "backup-mirror.example.com/quay"
+    insecureSkipTLSVerify: false
+  - source: "registry.redhat.io"
+    mirrors:
+    - "mirror-registry.example.com/redhat"
+    insecureSkipTLSVerify: false
+---
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
+metadata:
+  name: docker-mirror
+  labels:
+    app.kubernetes.io/name: imagedigestmirrorset
+    app.kubernetes.io/instance: docker-mirror
+    app.kubernetes.io/part-of: hcp-idms-operator
+spec:
+  imageDigestMirrors:
+  - source: "docker.io"
+    mirrors:
+    - "mirror-registry.example.com/docker"
+    insecureSkipTLSVerify: false
+---
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
+metadata:
+  name: default
+  labels:
+    app.kubernetes.io/name: imagedigestmirrorset
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/part-of: hcp-idms-operator
+spec:
+  imageDigestMirrors:
+  - source: "docker.io"
+    mirrors:
+    - "default-mirror.example.com/docker"
+    insecureSkipTLSVerify: false
+---
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
+metadata:
+  name: hypershift-managed-mirror
+  labels:
+    hypershift.openshift.io/managed: "true"
+    app.kubernetes.io/name: imagedigestmirrorset
+    app.kubernetes.io/instance: hypershift-managed-mirror
+spec:
+  imageDigestMirrors:
+  - source: "registry.redhat.io"
+    mirrors:
+    - "hypershift-mirror.example.com/redhat"
+    insecureSkipTLSVerify: false
