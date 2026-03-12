@@ -1,4 +1,6 @@
-# HCP IDMS Operator
+# [DEPRECATED] HCP IDMS Operator
+
+> **🛑 NATIVE IDMS SUPPORT HAS BEEN INTRODUCED**: Red Hat OpenShift Service on AWS (ROSA) now supports ImageDigestMirrorSets (IDMS) natively (as of Q4 2025). This operator is now deprecated and will no longer be maintained. For more information, including how to use the native IDMS feature, see the [ROSA documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws/4/html-single/images/index#images-registry-mirroring_image-configuration-hcp). 
 
 > **⚠️ EXPERIMENTAL OPERATOR**
 > This is an experimental operator and is **not officially supported by Red Hat**. Use it at your own risk. This operator is provided as-is for community use and experimentation.
